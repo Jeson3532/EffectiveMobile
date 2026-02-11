@@ -8,34 +8,34 @@ from dotenv import load_dotenv
 from typing import Annotated
 from fastapi import HTTPException
 from src.utils.enums.tokens import TokenType
-from src.backend.enums.exc import HTTPDetail
+from src.database.pg.methods import AuthMethods, AccountMethods
+from src.backend.enums.http import HTTPDetail
+from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends
+from src.backend.schemas.auth import UserVerifyModel
+from src.backend.schemas.auth import TokenData
+
 load_dotenv()
 
-_fake_db = {
-    "users": {
-        "1": {
-            "password": "123",
-            "admin": False
-        },
-        "admin": {
-            "password": "$argon2id$v=19$m=65536,t=3,p=4$rzkvMZGCClyeQRN8tqynTQ$Gdfg28LyFJO8PZa6otDL+HwgJMHcvL/P+w5tHpfHwzw",
-            "admin": True
-        }
-    }
-}
+auth_scheme = OAuth2PasswordBearer(tokenUrl="testing/auth")
+
 _algorithms = ['HS256']
 _SECRET_KEY = os.getenv("SECRET_KEY")
+
+EXP_TIME_MIN_REFRESH = 4320
+EXP_TIME_MIN_ACCESS = 300
 
 
 def get_datetime(tz=timezone.utc):
     return datetime.now(tz=tz)
 
 
-def generate_jwt_token(sub, exp_time_min: int = 60, token_type: TokenType = 'access'):
+def generate_jwt_token(sub, user_id, exp_time_min: int = 60, token_type: TokenType = 'access'):
     try:
         now = get_datetime()
         payload = {
             "sub": sub,
+            "user_id": user_id,
             "type": token_type.value,
             "exp": now + timedelta(minutes=exp_time_min),
             "iat": now
@@ -70,16 +70,35 @@ def update_access_token(refresh_token: str) -> Annotated[dict, "Присылае
         raise HTTPException(status_code=401, detail="Ошибка при обработке токена")
 
 
-def verify_user(username: str, password: str) -> Annotated[dict, "Возвращает токен при успешной аутентификации"]:
-    user = _fake_db['users'].get(username, None)
-    if not user:
-        raise HTTPException(status_code=401, detail="Пользователя не существует")
+async def verify_user(email: str, password: str) -> Annotated[dict, "Возвращает токен при успешной аутентификации"]:
+    user = await AuthMethods.get_user_by_email(email, model=UserVerifyModel)
+    is_active = user.is_active
 
-    hash_user_pass = user.get("password", None)
-    logger.info(f"DDD: {hash_user_pass}")
+    if not is_active:
+        raise HTTPException(status_code=404, detail=HTTPDetail.DETAIL_404_NOT_FOUND_USER)
+
+    hash_user_pass = user.password
+    user_id = user.id
     verified = handler.verify_password(password, hash_user_pass)
     if verified:
-        access_token = generate_jwt_token(username, 300, token_type=TokenType.ACCESS)
-        refresh_token = generate_jwt_token(username, 4320, token_type=TokenType.REFRESH)
+        access_token = generate_jwt_token(email, user_id, EXP_TIME_MIN_ACCESS, token_type=TokenType.ACCESS)
+        refresh_token = generate_jwt_token(email, user_id, EXP_TIME_MIN_REFRESH, token_type=TokenType.REFRESH)
         return {"access_token": access_token, "refresh_token": refresh_token}
     raise HTTPException(status_code=401, detail=HTTPDetail.DETAIL_401_UNAUTHORIZED)
+
+
+async def get_user(access_token: str = Depends(auth_scheme)) -> TokenData:
+    try:
+        payload = jwt.decode(access_token, key=_SECRET_KEY, algorithms=_algorithms)
+        user_id = payload.get("user_id")
+        token_type = payload.get("type")
+        if token_type != TokenType.ACCESS.value:
+            raise HTTPException(status_code=400, detail="Токен не распознан")
+        if not await AccountMethods.account_is_active(user_id):
+            raise HTTPException(status_code=404, detail=HTTPDetail.DETAIL_404_NOT_FOUND_USER)
+        return TokenData(**payload)
+    except DecodeError as e:
+        logger.error(f"Ошибка при декодировании access-токена: {e}")
+        raise HTTPException(status_code=401, detail="Ошибка при декодировании токена")
+    except ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Срок действия токена истёк")
