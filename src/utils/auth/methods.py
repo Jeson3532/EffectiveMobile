@@ -14,7 +14,8 @@ from fastapi.security import OAuth2PasswordBearer
 from fastapi import Depends
 from src.backend.schemas.auth import UserVerifyModel
 from src.backend.schemas.auth import TokenData
-
+from src.utils.security.generator import generate_jti
+from src.database.redis.handler import check_blacklist
 load_dotenv()
 
 auth_scheme = OAuth2PasswordBearer(tokenUrl="testing/auth")
@@ -30,12 +31,14 @@ def get_datetime(tz=timezone.utc):
     return datetime.now(tz=tz)
 
 
-def generate_jwt_token(sub, user_id, exp_time_min: int = 60, token_type: TokenType = 'access'):
+def generate_jwt_token(sub, user_id, exp_time_min: int = 60, token_type: TokenType = 'access', role: str = "user"):
     try:
         now = get_datetime()
         payload = {
             "sub": sub,
             "user_id": user_id,
+            "role": role,
+            "jti": generate_jti(),
             "type": token_type.value,
             "exp": now + timedelta(minutes=exp_time_min),
             "iat": now
@@ -71,7 +74,7 @@ def update_access_token(refresh_token: str) -> Annotated[dict, "Присылае
 
 
 async def verify_user(email: str, password: str) -> Annotated[dict, "Возвращает токен при успешной аутентификации"]:
-    user = await AuthMethods.get_user_by_email(email, model=UserVerifyModel)
+    user = await AuthMethods.get_user_by_email(email.lower().strip(), model=UserVerifyModel)
     is_active = user.is_active
 
     if not is_active:
@@ -81,8 +84,10 @@ async def verify_user(email: str, password: str) -> Annotated[dict, "Возвр�
     user_id = user.id
     verified = handler.verify_password(password, hash_user_pass)
     if verified:
-        access_token = generate_jwt_token(email, user_id, EXP_TIME_MIN_ACCESS, token_type=TokenType.ACCESS)
-        refresh_token = generate_jwt_token(email, user_id, EXP_TIME_MIN_REFRESH, token_type=TokenType.REFRESH)
+        access_token = generate_jwt_token(email, user_id, EXP_TIME_MIN_ACCESS, token_type=TokenType.ACCESS,
+                                          role=user.role)
+        refresh_token = generate_jwt_token(email, user_id, EXP_TIME_MIN_REFRESH, token_type=TokenType.REFRESH,
+                                           role=user.role)
         return {"access_token": access_token, "refresh_token": refresh_token}
     raise HTTPException(status_code=401, detail=HTTPDetail.DETAIL_401_UNAUTHORIZED)
 
@@ -90,6 +95,10 @@ async def verify_user(email: str, password: str) -> Annotated[dict, "Возвр�
 async def get_user(access_token: str = Depends(auth_scheme)) -> TokenData:
     try:
         payload = jwt.decode(access_token, key=_SECRET_KEY, algorithms=_algorithms)
+
+        jti = payload.get("jti")
+        if await check_blacklist(jti):
+            raise HTTPException(status_code=401, detail="Сессия не найдена")
         user_id = payload.get("user_id")
         token_type = payload.get("type")
         if token_type != TokenType.ACCESS.value:

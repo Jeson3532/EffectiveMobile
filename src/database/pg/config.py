@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import pyprojroot as ppr
 from typing import Annotated
+
 root_path = ppr.here()
 env_path = root_path / '.env'
 
@@ -18,4 +19,3 @@ class DBConfig(BaseSettings):
     def url(self) -> Annotated[str, "URL подключения к БД"]:
         return (f"postgresql+asyncpg://{self.POSTGRES_USER}:"
                 f"{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}")
-

@@ -1,7 +1,8 @@
 from fastapi.security import OAuth2PasswordRequestForm
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Response, Request
 from src.utils.auth import methods as auth_methods
 from src.backend.schemas.auth import TokenData
+from src.utils.auth.permissions import RightsChecker
 
 router = APIRouter(prefix='/testing', tags=['Тестирование', 'Testing'])
 
@@ -15,6 +16,11 @@ async def login(response: Response, auth_form=Depends(OAuth2PasswordRequestForm)
     return tokens
 
 
-@router.get("/parseToken", description="Ручка для проверки payload токена")
-async def _(user: TokenData = Depends(auth_methods.get_user)):
+@router.get("/parseToken", description="Ручка для проверки payload токена", )
+async def _(user: TokenData = Depends(RightsChecker("testing.parseToken"))):
     return user
+
+
+@router.get("/getCookie", description="Ручка для проверки содержимого куков", )
+async def _(request: Request, user: TokenData = Depends(RightsChecker("testing.readCookies"))):
+    return request.cookies

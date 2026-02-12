@@ -2,17 +2,25 @@ name: eff-mobile
 
 services:
   backend:
+    container_name: effective-mobile-backend-1
     build: .
     ports:
       - "8000:8000"
     depends_on:
       - postgres_db
+      - redis_db
     volumes:
       - ./migrations:/app/migrations
   postgres_db:
+    container_name: effective-mobile-postgres_db-1
     image: postgres
     env_file: .env
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - ./postgres_data:/var/lib/postgresql/18/docker
+  redis_db:
+    image: redis
+    container_name: effective-mobile-redis_db-1
+    expose:
+      - "6379"

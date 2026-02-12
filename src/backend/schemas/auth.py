@@ -43,6 +43,7 @@ class UserVerifyModel(BaseModel):
     username: str = Field(...)
     email: EmailStr = Field(...)
     password: str = Field(...)
+    role: str = Field()
     is_active: bool = Field(...)
 
     model_config = ConfigDict(from_attributes=True)
@@ -50,6 +51,9 @@ class UserVerifyModel(BaseModel):
 
 class TokenData(BaseModel):
     sub: str = Field(...)
+    role: str = Field(...)
+    type: str = Field(...)
+    jti: str = Field(...)
     user_id: int = Field(...)
     exp: int = Field(...)
     iat: int = Field(...)

@@ -6,8 +6,10 @@ from src.database.pg.methods import AuthMethods
 router = APIRouter(prefix="/auth", tags=['Аутентификация', 'Authentication'])
 
 
-@router.post("/register", response_model=auth_schema.UserRegResponse, description="Регистрация нового аккаунта в системе")
+@router.post("/register", response_model=auth_schema.UserRegResponse,
+             description="Регистрация нового аккаунта в системе")
 async def register(reg_form: auth_schema.UserRegModel = Body(...)):
+    reg_form = reg_form.model_copy(update={"email": reg_form.email.lower().strip()})
     user = await AuthMethods.register_user(reg_form)
     return user
 
@@ -19,4 +21,3 @@ async def login(response: Response, auth_form: auth_schema.UserAuthModel = Body(
                         httponly=True,
                         max_age=4320 * 60)
     return tokens
-

@@ -2,6 +2,7 @@ from pwdlib import PasswordHash
 from pwdlib.exceptions import UnknownHashError, HasherNotAvailable
 from src.utils.log import logger
 from fastapi import HTTPException
+
 pwd = PasswordHash.recommended()
 
 
@@ -19,5 +20,3 @@ def verify_password(password: str, hashed_password: str) -> bool:
     except UnknownHashError as e:
         logger.error(f"Неверный хеш в базе: {hashed_password}, лог ошибки: {e}")
         raise HTTPException(status_code=500, detail="Произошла ошибка при попытке входа в аккаунт, попробуйте позже")
-
-
