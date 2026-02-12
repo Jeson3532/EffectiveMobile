@@ -39,10 +39,9 @@ REDIS_PORT=6379
 7. **Забилдите и запустите контейнеры:**
     - ```docker compose up -d --build``` 
 8. **Загрузите дамп базы:**  
-  .sql: ```cat db_backup.sql | docker exec -i effective-mobile-postgres_db-1 psql -U admin -d efmobile```  
-  .dump: ```docker exec -i effective-mobile-postgres_db-1 pg_restore -U admin -d efmobile --clean < db_backup.dump```
+  .sql: ```cat db_backup.sql | docker exec -i effective-mobile-postgres_db-1 psql -U admin -d efmobile```
 9. **Загрузите все миграции (опционально, но для масштабирования потребуется):**  
-   - ```docker exec -it effective-mobile-backend-1 alembic upgrade head```
+   - ```docker exec -it effective-mobile-backend-1 alembic stamp head```
 10. **Подключитесь по адресу localhost:8000/docs (Swagger) либо localhost:8000/redoc (ReDoc) для тестирования функционала.**  
 **Вы можете воспользоваться кнопкой 'Authorize' справа сверху  и войти в аккаунт с root-правами:**
     - ```username: root@gmail.com```
